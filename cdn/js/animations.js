@@ -1607,7 +1607,7 @@ function initCaptionNumbering() {
 }
 
 // ================================================================================
-// 🎨 ARTICLES SCROLL FADES - ScrollTrigger fade for article images
+// 🎨 ARTICLES SCROLL FADES - ScrollTrigger fade for article images (simple fade, no zoom)
 // ================================================================================
 function initArticlesScrollFades() {
   if (!window.gsap || !window.ScrollTrigger) {
@@ -1616,15 +1616,15 @@ function initArticlesScrollFades() {
   }
   
   const activeContainer = document.querySelector('[data-barba="container"]:not([aria-hidden="true"])') || document;
-  // Target all images on article pages (excluding nav/header images)
-  const articleImages = activeContainer.querySelectorAll('main img, .u-section img, [data-barba="container"] img');
+  // Target all images in article sections
+  const articleImages = activeContainer.querySelectorAll('img');
   
   if (articleImages.length === 0) {
     console.log('⏭️ No article images found for scroll fades');
     return;
   }
   
-  console.log(`🎨 Initializing scroll fades for ${articleImages.length} article images`);
+  console.log(`🎨 Checking ${articleImages.length} images for scroll fades`);
   
   let imageCount = 0;
   
@@ -1633,15 +1633,18 @@ function initArticlesScrollFades() {
     if (img.dataset.scrollFadeBound) return;
     
     const rect = img.getBoundingClientRect();
-    const visibleNow = rect.top < window.innerHeight * 0.9 && rect.bottom > 0;
+    const visibleNow = rect.top < window.innerHeight * 0.85 && rect.bottom > 0;
     
     img.dataset.scrollFadeBound = 'true';
     
-    // Skip if already visible
-    if (visibleNow) return;
+    // Skip if already visible (above fold)
+    if (visibleNow) {
+      console.log('⏭️ Image already visible, skipping fade');
+      return;
+    }
     
-    // Set initial state
-    gsap.set(img, { opacity: 0, scale: 1.05 });
+    // Set initial state (simple fade, NO SCALE)
+    gsap.set(img, { opacity: 0 });
     
     // Listen for image load to refresh ScrollTrigger
     if (img.nodeName === 'IMG' && !img.complete) {
@@ -1660,14 +1663,8 @@ function initArticlesScrollFades() {
       onEnter: () => {
         gsap.to(img, {
           opacity: 1,
-          scale: 1,
           duration: 0.8,
-          ease: 'sine.inOut',
-          clearProps: 'all',
-          onComplete: () => {
-            // Ensure opacity stays at 1 after GSAP releases control
-            img.style.opacity = '1';
-          }
+          ease: 'sine.inOut'
         });
       }
     });
