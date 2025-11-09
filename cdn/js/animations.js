@@ -141,9 +141,21 @@ function initNavBackgroundPerSection() {
       onLeaveBack: () => {
         navDesktopContain.classList.remove('u-background-1');
         console.log('🧹 Nav background removed (leaving back)');
+      },
+      onRefresh: (self) => {
+        // Check initial state on load/refresh
+        if (self.isActive) {
+          navDesktopContain.classList.add('u-background-1');
+          console.log('✅ Nav background added (initial state)');
+        } else {
+          navDesktopContain.classList.remove('u-background-1');
+        }
       }
     });
   });
+  
+  // Force a refresh to check initial state
+  ScrollTrigger.refresh();
   
   console.log('✅ Nav background per section initialized');
 }
@@ -170,8 +182,11 @@ function initNavColorChange() {
       return;
     }
     
+  let currentMode = null; // Track current state to avoid redundant updates
+  
   function setNav(mode){
-    console.log(`🎨 Setting nav to: ${mode}`);
+    if (currentMode === mode) return; // Skip if already in this mode
+    currentMode = mode;
     nav.classList.remove('u-nav-normal','u-nav-invert');
     nav.classList.add(mode === 'invert' ? 'u-nav-invert' : 'u-nav-normal');
   }
@@ -179,7 +194,6 @@ function initNavColorChange() {
   function checkNavState() {
     // Disable nav color change for "stories-overview" page (check dynamically for Barba)
     if (window.location.pathname.includes('/stories-overview')) {
-      console.log('⏭️ Nav color change disabled for stories-overview page');
       setNav('normal');
       return;
     }
@@ -187,7 +201,6 @@ function initNavColorChange() {
     // Scope to the active Barba container if present, otherwise the whole document
     const activeContainer = document.querySelector('[data-barba="container"]:not([aria-hidden="true"])') || document;
     const overlays = activeContainer.querySelectorAll('.u-nav-theme-overlay[data-nav-theme="invert"]');
-    console.log(`🔍 Found ${overlays.length} overlay element(s) in active container with data-nav-theme="invert"`);
 
     // Use the bottom of the nav as the detection line so we test what actually sits behind the nav
     const navEl = document.querySelector('.nav_component');
@@ -196,32 +209,23 @@ function initNavColorChange() {
     
     let shouldInvert = false;
     
-    overlays.forEach((el, index) => {
+    overlays.forEach((el) => {
       const rect = el.getBoundingClientRect();
       const isCovering = rect.top <= probeY && rect.bottom >= probeY; // overlay intersects nav area line
-      console.log(`  Overlay ${index + 1}: top=${rect.top.toFixed(0)}, bottom=${rect.bottom.toFixed(0)}, navY=${probeY}, covering=${isCovering}`);
       if (isCovering) shouldInvert = true;
     });
     
-    console.log(`🎨 Should invert: ${shouldInvert}`);
     setNav(shouldInvert ? 'invert' : 'normal');
   }
 
-  // Create a single ScrollTrigger that fires on every scroll update
-  ScrollTrigger.create({
-    trigger: 'body',
-    start: 'top top',
-    end: 'bottom bottom',
-    onUpdate: checkNavState,
-    onRefresh: checkNavState
-  });
-
-  // Also listen to scroll events directly
+  // Throttled scroll listener - only check every ~100ms
+  let scrollTimeout;
   let ticking = false;
   window.addEventListener('scroll', () => {
     if (!ticking) {
       window.requestAnimationFrame(() => {
-        checkNavState();
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(checkNavState, 50); // Throttle to 50ms
         ticking = false;
       });
       ticking = true;
@@ -252,7 +256,46 @@ function initNavColorChange() {
   try { window.__updateNavTheme = checkNavState; } catch (e) {}
 }
 
-
+// ================================================================================
+// 📍 STICKY SECTION LISTENER - Updates text based on current section
+// ================================================================================
+function initSectionListener() {
+  if (!window.gsap || !window.ScrollTrigger) return;
+  
+  const listener = document.querySelector('.creator_section_listener');
+  if (!listener) {
+    console.log('⏭️ .creator_section_listener not found');
+    return;
+  }
+  
+  const containers = document.querySelectorAll('.creator_scroll_contain[id]');
+  console.log(`📍 Found ${containers.length} .creator_scroll_contain containers with IDs`);
+  
+  if (containers.length === 0) return;
+  
+  // Get actual nav element height
+  const navElement = document.querySelector('.nav_component');
+  const navHeight = navElement ? navElement.offsetHeight : 80;
+  console.log(`📍 Using nav height: ${navHeight}px`);
+  
+  containers.forEach((container) => {
+    ScrollTrigger.create({
+      trigger: container,
+      start: `top ${navHeight}px`,
+      end: 'bottom top',
+      onEnter: () => {
+        console.log(`📍 Entering: ${container.id}`);
+        listener.textContent = container.id;
+      },
+      onEnterBack: () => {
+        console.log(`📍 Entering back: ${container.id}`);
+        listener.textContent = container.id;
+      }
+    });
+  });
+  
+  console.log('✅ Section listener initialized');
+}
 
 // ================================================================================
 // 🔁 LIST ↔ GRID TOGGLE (GSAP Flip)
@@ -363,6 +406,11 @@ function initCreatorGridToggle() {
     '.index_item img, .index_item picture': {
       grid: ['u-padding-7'],
       list: []
+    },
+    // Image wrapper - add max-width in list view
+    '.index_img_wrap': {
+      grid: [],
+      list: ['u-max-width-30ch']
     },
     // First u-content-wrapper (image wrapper)
     '.index_item > [data-wf--content-wrapper--alignment="inherit"]:nth-child(4) .u-content-wrapper': {
@@ -624,6 +672,277 @@ function initImageHoverEffects() {
   });
   
   console.log('✅ Image hover effects initialized');
+}
+
+// ================================================================================
+// 🔄 CREATOR IMAGE LIST TOGGLE - Grid ↔ Flex with GSAP animations
+// ================================================================================
+function initCreatorImgListToggle() {
+  if (!window.gsap) {
+    console.log('⏭️ GSAP not available, skipping creator img list toggle');
+    return;
+  }
+  
+  const container = document.querySelector('.creator_img_list');
+  if (!container) {
+    console.log('⏭️ .creator_img_list not found, skipping toggle');
+    return;
+  }
+  
+  // Check if already initialized
+  if (container.dataset.toggleBound === 'true') {
+    console.log('⏭️ Creator img list toggle already bound, skipping');
+    return;
+  }
+  container.dataset.toggleBound = 'true';
+  
+  // Wait for dynamic content to load (Webflow CMS)
+  // The structure is: .creator_img_list > .creator_img (CMS items)
+  let items = container.querySelectorAll('.creator_img');
+  
+  // Debug: log what we found
+  console.log('🔍 Searching for items in .creator_img_list');
+  console.log('   - Direct children:', container.children.length);
+  console.log('   - .creator_img items:', items.length);
+  
+  // Log the class names of direct children to see what they actually are
+  if (items.length === 0 && container.children.length > 0) {
+    console.log('   - Child class names:');
+    Array.from(container.children).forEach((child, i) => {
+      console.log(`     ${i + 1}. ${child.className || '(no class)'}, tag: ${child.tagName}`);
+    });
+  }
+  
+  if (items.length === 0) {
+    console.log('⏭️ No items found yet, waiting 1000ms and trying again...');
+    
+    // Try again after a delay (CMS might still be loading)
+    setTimeout(() => {
+      container.dataset.toggleBound = 'false'; // Reset flag
+      initCreatorImgListToggle(); // Retry
+    }, 1000);
+    
+    return;
+  }
+  
+  // Find toggle buttons by toggle attribute
+  const gridBtn = document.querySelector('.button_main_wrap[toggle="is-grid-creator"]');
+  const listBtn = document.querySelector('.button_main_wrap[toggle="is-list-creator"]');
+  
+  // Try to find click targets in images (optional - works even if buttons not present)
+  let clickTargets = [];
+  items.forEach(item => {
+    const p = item.querySelector('p');
+    if (p) clickTargets.push(p);
+  });
+  
+  // If no <p> found, use the items themselves
+  if (clickTargets.length === 0) {
+    clickTargets = Array.from(items);
+    console.log('⚠️ No <p> elements found, using .creator_img items as click targets');
+  }
+  
+  // Convert items to array for GSAP
+  const itemsArray = Array.from(items);
+  
+  let isGridView = true; // assuming starts in grid
+  
+  console.log('🔄 Initializing creator img list toggle:', itemsArray.length, 'items,', clickTargets.length, 'click targets');
+  
+  let lastClickedItem = null; // Track which item was clicked
+  
+  // Switch to Grid View - with Finsweet timing
+  function switchToGrid(clickedItem = null) {
+    console.log('🎨 Switching to GRID view');
+    
+    // Store the clicked item's position before layout changes
+    let itemOffsetTop = 0;
+    if (clickedItem) {
+      itemOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
+    }
+    
+    // Kill any running animations
+    gsap.killTweensOf(itemsArray);
+    
+    // Fade out
+    gsap.to(itemsArray, {
+      scale: 0.9,
+      opacity: 0,
+      duration: 0.3,
+      ease: "power1.inOut",
+      onComplete: () => {
+        // Swap classes on container
+        container.classList.remove('u-flex-vertical-nowrap');
+        container.classList.add('u-grid-custom');
+        
+        // Remove max-width from image wrappers (grid view)
+        itemsArray.forEach(item => {
+          const imgWrap = item.querySelector('.creator_img_wrap');
+          if (imgWrap) {
+            imgWrap.classList.remove('u-max-width-30ch');
+          }
+        });
+        
+        // Fade in with stagger
+        gsap.fromTo(itemsArray,
+          { opacity: 0, y: 30, scale: 0.9 },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.5,
+            ease: "power1.out",
+            stagger: 0.05,
+            onComplete: () => {
+              // Restore scroll to keep clicked item in same position AFTER animation completes
+              if (clickedItem) {
+                setTimeout(() => {
+                  const newOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
+                  const scrollAdjustment = newOffsetTop - itemOffsetTop;
+                  if (Math.abs(scrollAdjustment) > 5) { // Only adjust if difference is significant
+                    window.scrollBy(0, scrollAdjustment);
+                  }
+                }, 50);
+              }
+            }
+          }
+        );
+        
+        isGridView = true;
+      }
+    });
+  }
+  
+  // Switch to List View - with Finsweet timing
+  function switchToList(clickedItem = null) {
+    console.log('🎨 Switching to LIST view');
+    
+    // Store the clicked item's position before layout changes
+    let itemOffsetTop = 0;
+    if (clickedItem) {
+      itemOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
+    }
+    
+    // Kill any running animations
+    gsap.killTweensOf(itemsArray);
+    
+    // Fade out
+    gsap.to(itemsArray, {
+      scale: 0.9,
+      opacity: 0,
+      duration: 0.3,
+      ease: "power1.inOut",
+      onComplete: () => {
+        // Swap classes on container
+        container.classList.remove('u-grid-custom');
+        container.classList.add('u-flex-vertical-nowrap');
+        
+        // Add max-width to image wrappers (list view)
+        itemsArray.forEach(item => {
+          const imgWrap = item.querySelector('.creator_img_wrap');
+          if (imgWrap) {
+            imgWrap.classList.add('u-max-width-30ch');
+          }
+        });
+        
+        // Fade in with stagger
+        gsap.fromTo(itemsArray,
+          { opacity: 0, y: 30, scale: 0.9 },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.5,
+            ease: "power1.out",
+            stagger: 0.05,
+            onComplete: () => {
+              // Restore scroll to keep clicked item in same position AFTER animation completes
+              if (clickedItem) {
+                setTimeout(() => {
+                  const newOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
+                  const scrollAdjustment = newOffsetTop - itemOffsetTop;
+                  if (Math.abs(scrollAdjustment) > 5) { // Only adjust if difference is significant
+                    window.scrollBy(0, scrollAdjustment);
+                  }
+                }, 50);
+              }
+            }
+          }
+        );
+        
+        isGridView = false;
+      }
+    });
+  }
+  
+  // Helper: Find the first visible item in viewport (for scroll preservation)
+  function findVisibleItem() {
+    const viewportTop = window.pageYOffset;
+    const viewportBottom = viewportTop + window.innerHeight;
+    
+    for (let item of itemsArray) {
+      const rect = item.getBoundingClientRect();
+      const itemTop = rect.top + window.pageYOffset;
+      const itemBottom = itemTop + rect.height;
+      
+      // Check if item is in viewport
+      if (itemBottom > viewportTop && itemTop < viewportBottom) {
+        return item;
+      }
+    }
+    
+    // Fallback to first item
+    return itemsArray[0] || null;
+  }
+  
+  // Click handlers for buttons (if they exist)
+  if (gridBtn) {
+    gridBtn.addEventListener('click', (e) => {
+      console.log('🖱️ Grid button clicked');
+      e.preventDefault();
+      if (!isGridView) {
+        // Use last clicked item, or find first visible item
+        const referenceItem = lastClickedItem || findVisibleItem();
+        switchToGrid(referenceItem);
+      }
+    });
+  }
+  
+  if (listBtn) {
+    listBtn.addEventListener('click', (e) => {
+      console.log('🖱️ List button clicked');
+      e.preventDefault();
+      if (isGridView) {
+        // Use last clicked item, or find first visible item
+        const referenceItem = lastClickedItem || findVisibleItem();
+        switchToList(referenceItem);
+      }
+    });
+  }
+  
+  // Click handlers for images - toggle on click
+  clickTargets.forEach(target => {
+    target.style.cursor = 'pointer';
+    target.style.userSelect = 'none'; // Prevent text selection
+    
+    target.addEventListener('click', (e) => {
+      console.log('🖱️ Image click detected, toggling view');
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Find the parent .creator_img item
+      const clickedItem = target.closest('.creator_img') || target;
+      lastClickedItem = clickedItem;
+      
+      if (isGridView) {
+        switchToList(clickedItem);
+      } else {
+        switchToGrid(clickedItem);
+      }
+    });
+  });
+  
+  console.log('✅ Creator img list toggle initialized (buttons:', !!gridBtn && !!listBtn, ', image clicks:', clickTargets.length, ')');
 }
 
 // ================================================================================
@@ -1165,6 +1484,11 @@ function initAll() {
     console.error('Nav color change failed', e);
   }
   try {
+    initSectionListener();
+  } catch (e) {
+    console.error('Section listener failed', e);
+  }
+  try {
     initNavBackgroundPerSection();
   } catch (e) {
     console.error('Nav background per section failed', e);
@@ -1187,13 +1511,6 @@ function initAll() {
     initArticlesHoverEffects();
   } catch (e) {
     console.error('Articles hover effects failed', e);
-  }
-  
-  // Initialize caption numbering
-  try {
-    initCaptionNumbering();
-  } catch (e) {
-    console.error('Caption numbering failed', e);
   }
   
   // DON'T call initAccordions or initScrollImageFades here - they're defined inside Barba IIFE
@@ -1247,6 +1564,11 @@ function initFinsweetFeatures() {
   if (document.querySelector('.index_collection')) {
     try { initCreatorGridToggle(); } catch (e) { console.warn('Creator grid toggle init failed', e); }
     try { initImageHoverEffects(); } catch (e) { console.warn('Image hover effects init failed', e); }
+  }
+  
+  // Initialize creator img list toggle if elements exist
+  if (document.querySelector('.creator_img_list')) {
+    try { initCreatorImgListToggle(); } catch (e) { console.warn('Creator img list toggle init failed', e); }
   }
 }
 
@@ -1529,85 +1851,7 @@ if (document.readyState === 'loading') {
 }
 
 // ================================================================================
-// 🔢 AUTO-NUMBER CAPTIONS - Add bold numbers to caption paragraphs
-// ================================================================================
-function initCaptionNumbering() {
-  console.log('🔢 Initializing caption numbering');
-  
-  // Find all caption containers
-  const captionContainers = document.querySelectorAll('.c-paragraph.is-caption');
-  
-  if (captionContainers.length === 0) {
-    console.log('⏭️ No caption containers found');
-    return;
-  }
-  
-  console.log(`📝 Found ${captionContainers.length} caption container(s)`);
-  
-  captionContainers.forEach((container, containerIndex) => {
-    // Skip if already numbered
-    if (container.dataset.captionNumbered === 'true') {
-      console.log(`⏭️ Container ${containerIndex + 1} already numbered, skipping`);
-      return;
-    }
-    
-    // Mark as numbered
-    container.dataset.captionNumbered = 'true';
-    
-    // Get all child paragraph elements (or split by <br> tags)
-    const paragraphs = container.querySelectorAll('p');
-    
-    if (paragraphs.length > 0) {
-      // If container has <p> tags, number each one
-      paragraphs.forEach((p, index) => {
-        const number = index + 1;
-        
-        // Check if already has a number at the start
-        const firstChild = p.firstChild;
-        if (firstChild && firstChild.nodeName === 'STRONG' && /^\d+\.?\s*/.test(firstChild.textContent)) {
-          console.log(`  ⏭️ Paragraph ${number} already has a number, skipping`);
-          return;
-        }
-        
-        // Create bold number element
-        const numberEl = document.createElement('strong');
-        numberEl.textContent = `${number} `;
-        numberEl.style.fontWeight = 'bold';
-        
-        // Insert at the beginning
-        p.insertBefore(numberEl, p.firstChild);
-        console.log(`  ✅ Added number ${number} to paragraph`);
-      });
-    } else {
-      // If no <p> tags, split by <br> and add numbers
-      const html = container.innerHTML;
-      const parts = html.split(/<br\s*\/?>/i);
-      
-      if (parts.length > 1) {
-        const numberedParts = parts.map((part, index) => {
-          const trimmed = part.trim();
-          if (!trimmed) return trimmed;
-          
-          // Check if already starts with a number
-          if (/^<strong>\d+\.?\s*<\/strong>/.test(trimmed) || /^\d+\.?\s+/.test(trimmed)) {
-            return part;
-          }
-          
-          const number = index + 1;
-          return `<strong>${number}</strong> ${part}`;
-        });
-        
-        container.innerHTML = numberedParts.join('<br>');
-        console.log(`  ✅ Added numbers to ${parts.length} line breaks`);
-      }
-    }
-  });
-  
-  console.log('✅ Caption numbering complete');
-}
-
-// ================================================================================
-// 🎨 ARTICLES SCROLL FADES - ScrollTrigger fade for article images (simple fade, no zoom)
+// 🎨 ARTICLES SCROLL FADES - ScrollTrigger fade for article images
 // ================================================================================
 function initArticlesScrollFades() {
   if (!window.gsap || !window.ScrollTrigger) {
@@ -1616,15 +1860,14 @@ function initArticlesScrollFades() {
   }
   
   const activeContainer = document.querySelector('[data-barba="container"]:not([aria-hidden="true"])') || document;
-  // Target all images in article sections
-  const articleImages = activeContainer.querySelectorAll('img');
+  const articleImages = activeContainer.querySelectorAll('.article_item_img');
   
   if (articleImages.length === 0) {
     console.log('⏭️ No article images found for scroll fades');
     return;
   }
   
-  console.log(`🎨 Checking ${articleImages.length} images for scroll fades`);
+  console.log(`🎨 Initializing scroll fades for ${articleImages.length} article images`);
   
   let imageCount = 0;
   
@@ -1633,18 +1876,15 @@ function initArticlesScrollFades() {
     if (img.dataset.scrollFadeBound) return;
     
     const rect = img.getBoundingClientRect();
-    const visibleNow = rect.top < window.innerHeight * 0.85 && rect.bottom > 0;
+    const visibleNow = rect.top < window.innerHeight * 0.9 && rect.bottom > 0;
     
     img.dataset.scrollFadeBound = 'true';
     
-    // Skip if already visible (above fold)
-    if (visibleNow) {
-      console.log('⏭️ Image already visible, skipping fade');
-      return;
-    }
+    // Skip if already visible
+    if (visibleNow) return;
     
-    // Set initial state (simple fade, NO SCALE)
-    gsap.set(img, { opacity: 0 });
+    // Set initial state
+    gsap.set(img, { opacity: 0, scale: 1.05 });
     
     // Listen for image load to refresh ScrollTrigger
     if (img.nodeName === 'IMG' && !img.complete) {
@@ -1663,8 +1903,14 @@ function initArticlesScrollFades() {
       onEnter: () => {
         gsap.to(img, {
           opacity: 1,
+          scale: 1,
           duration: 0.8,
-          ease: 'sine.inOut'
+          ease: 'sine.inOut',
+          clearProps: 'all',
+          onComplete: () => {
+            // Ensure opacity stays at 1 after GSAP releases control
+            img.style.opacity = '1';
+          }
         });
       }
     });
@@ -2195,13 +2441,16 @@ function initArticlesHoverEffects() {
                 
                 try { initPaginationReinit(); } catch (e) { console.warn('Pagination reinit failed on enter', e); }
                 try { initCreatorGridToggle(); } catch (e) { console.warn('Creator grid toggle init failed on enter', e); }
+                try { initCreatorImgListToggle(); } catch (e) { console.warn('Creator img list toggle init failed on enter', e); }
                 try { initArticleImageContainers(); } catch (e) { console.warn('Article image containers init failed on enter', e); }
                 try { initArticlesScrollFades(); } catch (e) { console.warn('Articles scroll fades init failed on enter', e); }
                 try { initArticlesHoverEffects(); } catch (e) { console.warn('Articles hover effects init failed on enter', e); }
-                try { initCaptionNumbering(); } catch (e) { console.warn('Caption numbering init failed on enter', e); }
                 
                 // Reinitialize nav background per section
                 try { initNavBackgroundPerSection(); } catch (e) { console.warn('Nav background per section init failed on enter', e); }
+                
+                // Reinitialize section listener
+                try { initSectionListener(); } catch (e) { console.warn('Section listener init failed on enter', e); }
               } else {
                 window.scrollTo(0, 0);
               }
@@ -2227,18 +2476,18 @@ function initArticlesHoverEffects() {
                   await new Promise(resolve => setTimeout(resolve, tl.duration() * 1000 + 100));
                 }
                 try { initCreatorGridToggle(); } catch (e) { console.warn('Creator grid toggle init failed on once', e); }
+                try { initCreatorImgListToggle(); } catch (e) { console.warn('Creator img list toggle init failed on once', e); }
                 try { initArticleImageContainers(); } catch (e) { console.warn('Article image containers init failed on once', e); }
                 try { initArticlesScrollFades(); } catch (e) { console.warn('Articles scroll fades init failed on once', e); }
                 try { initArticlesHoverEffects(); } catch (e) { console.warn('Articles hover effects init failed on once', e); }
-                try { initCaptionNumbering(); } catch (e) { console.warn('Caption numbering init failed on once', e); }
               } else {
                 console.warn('⚠️ Barba once hook: no GSAP or container');
                 try { initAccordions(); } catch (e) {}
                 try { initCreatorGridToggle(); } catch (e) {}
+                try { initCreatorImgListToggle(); } catch (e) {}
                 try { initArticleImageContainers(); } catch (e) {}
                 try { initArticlesScrollFades(); } catch (e) {}
                 try { initArticlesHoverEffects(); } catch (e) {}
-                try { initCaptionNumbering(); } catch (e) {}
               }
             }
           }
@@ -2254,10 +2503,10 @@ function initArticlesHoverEffects() {
           try { initFinsweetFilters(); } catch (e) {}
           try { initPaginationReinit(); } catch (e) {}
           try { initCreatorGridToggle(); } catch (e) {}
+          try { initCreatorImgListToggle(); } catch (e) {}
           try { initArticleImageContainers(); } catch (e) {}
           try { initArticlesScrollFades(); } catch (e) {}
           try { initArticlesHoverEffects(); } catch (e) {}
-          try { initCaptionNumbering(); } catch (e) {}
         }
         barba.hooks.afterEnter(() => {
           scheduleRecalc();
