@@ -475,9 +475,13 @@ function initCreatorGridToggle() {
     console.log('🎨 Switching to GRID view');
     // Save state
     collection.dataset.currentView = 'grid';
+    collection.dataset.isIndexView = 'false'; // Exit index mode
     // Fade out quickly
     gsap.to(elItems, { opacity: 0, duration: 0.15, ease: 'power1.inOut', onComplete: () => {
       applyViewClasses('grid');
+      // Show images (happens during fade-out, not visible)
+      const imgWraps = collection.querySelectorAll('.index_img_wrap');
+      imgWraps.forEach(wrap => wrap.classList.remove('u-display-none'));
       // Fade in with minimal stagger
       gsap.to(elItems, { opacity: 1, duration: 0.25, ease: 'power1.out', stagger: 0.01, onComplete: () => {
         // Reapply image fade animations after view change
@@ -491,9 +495,13 @@ function initCreatorGridToggle() {
     console.log('🎨 Switching to LIST view');
     // Save state
     collection.dataset.currentView = 'list';
+    collection.dataset.isIndexView = 'false'; // Exit index mode
     // Fade out quickly
     gsap.to(elItems, { opacity: 0, duration: 0.15, ease: 'power1.inOut', onComplete: () => {
       applyViewClasses('list');
+      // Show images (happens during fade-out, not visible)
+      const imgWraps = collection.querySelectorAll('.index_img_wrap');
+      imgWraps.forEach(wrap => wrap.classList.remove('u-display-none'));
       // Fade in with minimal stagger
       gsap.to(elItems, { opacity: 1, duration: 0.25, ease: 'power1.out', stagger: 0.01, onComplete: () => {
         // Reapply image fade animations after view change
@@ -530,6 +538,49 @@ function initCreatorGridToggle() {
   };
   
   // ============================================================================
+  // 🔄 INDEX VIEW STATE - Stored on collection for persistence
+  // ============================================================================
+  if (!collection.dataset.isIndexView) {
+    collection.dataset.isIndexView = 'false';
+  }
+  
+  // Helper to apply index view instantly (for Finsweet observer - no animation)
+  const applyIndexView = () => {
+    const isIndexView = collection.dataset.isIndexView === 'true';
+    const imgWraps = collection.querySelectorAll('.index_img_wrap'); // Re-query every time
+    
+    if (isIndexView) {
+      // Index view = list layout + hidden images
+      applyViewClasses('list'); // Force list layout
+      imgWraps.forEach(wrap => wrap.classList.add('u-display-none'));
+    } else {
+      // Normal view - just show images (layout already set by grid/list)
+      imgWraps.forEach(wrap => wrap.classList.remove('u-display-none'));
+    }
+  };
+  
+  // Animated version for user clicks (like showGridView/showListView)
+  const showIndexView = () => {
+    const elItems = items();
+    const imgWraps = collection.querySelectorAll('.index_img_wrap');
+    console.log('🎨 Switching to INDEX view (animated)');
+    
+    // Save state
+    collection.dataset.isIndexView = 'true';
+    
+    // Fade out quickly
+    gsap.to(elItems, { opacity: 0, duration: 0.15, ease: 'power1.inOut', onComplete: () => {
+      applyViewClasses('list'); // Force list layout
+      imgWraps.forEach(wrap => wrap.classList.add('u-display-none')); // Hide images
+      
+      // Fade in with minimal stagger
+      gsap.to(elItems, { opacity: 1, duration: 0.25, ease: 'power1.out', stagger: 0.01, onComplete: () => {
+        resetAndReapplyImageFades();
+      }});
+    }});
+  };
+
+  // ============================================================================
   // 🔄 FINSWEET PAGINATION FIX - Reapply view after Finsweet updates DOM
   // ============================================================================
   const observeFinsweet = () => {
@@ -547,6 +598,9 @@ function initCreatorGridToggle() {
         // Reapply classes without animation (instant)
         applyViewClasses(currentView);
         
+        // Reapply index view state (new elements need classes too)
+        applyIndexView();
+        
         // Reinitialize hover effects for new items
         try { initImageHoverEffects(); } catch (e) { console.warn('Hover reinit failed', e); }
       }
@@ -558,19 +612,61 @@ function initCreatorGridToggle() {
   
   observeFinsweet();
 
+  // ============================================================================
+  // 🔄 INDEX TOGGLE - Setup for image hide/show
+  // ============================================================================
+  const indexBtns = activeContainer.querySelectorAll('[toggle="is-index"]');
+  
+  if (indexBtns.length > 0) {
+    console.log('🔍 Index toggle buttons:', indexBtns.length, 'found');
+  }
+  
   // Handle clicks on button_main_wrap and its children (Clickable component)
   const handleGridClick = (e) => {
     console.log('🖱️ Grid button clicked');
     e.preventDefault();
     e.stopPropagation();
-    showGridView();
+    showGridView(); // Handles index reset internally during fade-out
   };
   
   const handleListClick = (e) => {
     console.log('🖱️ List button clicked');
     e.preventDefault();
     e.stopPropagation();
-    showListView();
+    showListView(); // Handles index reset internally during fade-out
+  };
+  
+  const handleIndexClick = (e) => {
+    console.log('🖱️ Index button clicked');
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Toggle state on collection dataset (like grid/list do)
+    const currentState = collection.dataset.isIndexView === 'true';
+    const newState = !currentState;
+    
+    if (newState) {
+      // Entering index view - use animated version
+      showIndexView();
+    } else {
+      // Exiting index view - animate back to current grid/list view
+      const elItems = items();
+      const currentView = collection.dataset.currentView || 'list';
+      
+      collection.dataset.isIndexView = 'false';
+      
+      // Fade out quickly
+      gsap.to(elItems, { opacity: 0, duration: 0.15, ease: 'power1.inOut', onComplete: () => {
+        applyViewClasses(currentView); // Restore grid or list layout
+        const imgWraps = collection.querySelectorAll('.index_img_wrap');
+        imgWraps.forEach(wrap => wrap.classList.remove('u-display-none')); // Show images
+        
+        // Fade in with minimal stagger
+        gsap.to(elItems, { opacity: 1, duration: 0.25, ease: 'power1.out', stagger: 0.01, onComplete: () => {
+          resetAndReapplyImageFades();
+        }});
+      }});
+    }
   };
   
   // Attach listeners to ALL grid/list buttons
@@ -582,6 +678,12 @@ function initCreatorGridToggle() {
   listBtns.forEach((btn, index) => {
     btn.addEventListener('click', handleListClick, true);
     console.log(`✅ List button ${index + 1} listener attached`);
+  });
+  
+  // Attach listeners to index buttons
+  indexBtns.forEach((btn, index) => {
+    btn.addEventListener('click', handleIndexClick, true);
+    console.log(`✅ Index button ${index + 1} listener attached`);
   });
   
   console.log('✅ All click listeners attached');
