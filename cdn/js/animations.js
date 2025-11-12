@@ -174,8 +174,8 @@ function initNavColorChange() {
   gsap.registerPlugin(ScrollTrigger);
   console.log('✅ ScrollTrigger registered');
 
-  const nav = document.querySelector('.nav_links_component');
-  console.log('🔍 Looking for nav element (.nav_links_component):', nav ? '✅ Found' : '❌ Not found');
+  const nav = document.querySelector('.nav_links_link.u-pointer-on.is-home');
+  console.log('🔍 Looking for nav element (.nav_links_link.u-pointer-on.is-home):', nav ? '✅ Found' : '❌ Not found');
   
   if (!nav) {
     console.error('❌ Nav element not found! Check your Webflow class name.');
@@ -749,17 +749,16 @@ function initCreatorImgListToggle() {
   
   console.log('🔄 Initializing creator img list toggle:', itemsArray.length, 'items,', clickTargets.length, 'click targets');
   
-  let lastClickedItem = null; // Track which item was clicked
-  
-  // Switch to Grid View - with Finsweet timing
-  function switchToGrid(clickedItem = null) {
+  // Switch to Grid View
+  function switchToGrid() {
     console.log('🎨 Switching to GRID view');
     
-    // Store the clicked item's position before layout changes
-    let itemOffsetTop = 0;
-    if (clickedItem) {
-      itemOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
-    }
+    // Find first visible item in viewport before layout changes
+    const viewportTop = window.scrollY;
+    const firstVisibleItem = itemsArray.find(item => {
+      const rect = item.getBoundingClientRect();
+      return rect.top + window.scrollY >= viewportTop;
+    });
     
     // Kill any running animations
     gsap.killTweensOf(itemsArray);
@@ -768,8 +767,8 @@ function initCreatorImgListToggle() {
     gsap.to(itemsArray, {
       scale: 0.9,
       opacity: 0,
-      duration: 0.3,
-      ease: "power1.inOut",
+      duration: 0.5,
+      ease: "power2.inOut",
       onComplete: () => {
         // Swap classes on container
         container.classList.remove('u-flex-vertical-nowrap');
@@ -783,6 +782,14 @@ function initCreatorImgListToggle() {
           }
         });
         
+        // Scroll to keep first visible item in view after layout settles
+        if (firstVisibleItem) {
+          requestAnimationFrame(() => {
+            const newTop = firstVisibleItem.getBoundingClientRect().top + window.scrollY;
+            window.scrollTo(0, newTop - 100);
+          });
+        }
+        
         // Fade in with stagger
         gsap.fromTo(itemsArray,
           { opacity: 0, y: 30, scale: 0.9 },
@@ -790,21 +797,9 @@ function initCreatorImgListToggle() {
             opacity: 1,
             y: 0,
             scale: 1,
-            duration: 0.5,
-            ease: "power1.out",
-            stagger: 0.05,
-            onComplete: () => {
-              // Restore scroll to keep clicked item in same position AFTER animation completes
-              if (clickedItem) {
-                setTimeout(() => {
-                  const newOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
-                  const scrollAdjustment = newOffsetTop - itemOffsetTop;
-                  if (Math.abs(scrollAdjustment) > 5) { // Only adjust if difference is significant
-                    window.scrollBy(0, scrollAdjustment);
-                  }
-                }, 50);
-              }
-            }
+            duration: 0.8,
+            ease: "power2.out",
+            stagger: 0.1
           }
         );
         
@@ -813,15 +808,16 @@ function initCreatorImgListToggle() {
     });
   }
   
-  // Switch to List View - with Finsweet timing
-  function switchToList(clickedItem = null) {
+  // Switch to List View
+  function switchToList() {
     console.log('🎨 Switching to LIST view');
     
-    // Store the clicked item's position before layout changes
-    let itemOffsetTop = 0;
-    if (clickedItem) {
-      itemOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
-    }
+    // Find first visible item in viewport before layout changes
+    const viewportTop = window.scrollY;
+    const firstVisibleItem = itemsArray.find(item => {
+      const rect = item.getBoundingClientRect();
+      return rect.top + window.scrollY >= viewportTop;
+    });
     
     // Kill any running animations
     gsap.killTweensOf(itemsArray);
@@ -830,8 +826,8 @@ function initCreatorImgListToggle() {
     gsap.to(itemsArray, {
       scale: 0.9,
       opacity: 0,
-      duration: 0.3,
-      ease: "power1.inOut",
+      duration: 0.5,
+      ease: "power2.inOut",
       onComplete: () => {
         // Swap classes on container
         container.classList.remove('u-grid-custom');
@@ -845,6 +841,14 @@ function initCreatorImgListToggle() {
           }
         });
         
+        // Scroll to keep first visible item in view after layout settles
+        if (firstVisibleItem) {
+          requestAnimationFrame(() => {
+            const newTop = firstVisibleItem.getBoundingClientRect().top + window.scrollY;
+            window.scrollTo(0, newTop - 100);
+          });
+        }
+        
         // Fade in with stagger
         gsap.fromTo(itemsArray,
           { opacity: 0, y: 30, scale: 0.9 },
@@ -852,21 +856,9 @@ function initCreatorImgListToggle() {
             opacity: 1,
             y: 0,
             scale: 1,
-            duration: 0.5,
-            ease: "power1.out",
-            stagger: 0.05,
-            onComplete: () => {
-              // Restore scroll to keep clicked item in same position AFTER animation completes
-              if (clickedItem) {
-                setTimeout(() => {
-                  const newOffsetTop = clickedItem.getBoundingClientRect().top + window.pageYOffset;
-                  const scrollAdjustment = newOffsetTop - itemOffsetTop;
-                  if (Math.abs(scrollAdjustment) > 5) { // Only adjust if difference is significant
-                    window.scrollBy(0, scrollAdjustment);
-                  }
-                }, 50);
-              }
-            }
+            duration: 0.8,
+            ease: "power2.out",
+            stagger: 0.1
           }
         );
         
@@ -875,48 +867,18 @@ function initCreatorImgListToggle() {
     });
   }
   
-  // Helper: Find the first visible item in viewport (for scroll preservation)
-  function findVisibleItem() {
-    const viewportTop = window.pageYOffset;
-    const viewportBottom = viewportTop + window.innerHeight;
-    
-    for (let item of itemsArray) {
-      const rect = item.getBoundingClientRect();
-      const itemTop = rect.top + window.pageYOffset;
-      const itemBottom = itemTop + rect.height;
-      
-      // Check if item is in viewport
-      if (itemBottom > viewportTop && itemTop < viewportBottom) {
-        return item;
-      }
-    }
-    
-    // Fallback to first item
-    return itemsArray[0] || null;
-  }
-  
   // Click handlers for buttons (if they exist)
   if (gridBtn) {
-    gridBtn.addEventListener('click', (e) => {
+    gridBtn.addEventListener('click', () => {
       console.log('🖱️ Grid button clicked');
-      e.preventDefault();
-      if (!isGridView) {
-        // Use last clicked item, or find first visible item
-        const referenceItem = lastClickedItem || findVisibleItem();
-        switchToGrid(referenceItem);
-      }
+      if (!isGridView) switchToGrid();
     });
   }
   
   if (listBtn) {
-    listBtn.addEventListener('click', (e) => {
+    listBtn.addEventListener('click', () => {
       console.log('🖱️ List button clicked');
-      e.preventDefault();
-      if (isGridView) {
-        // Use last clicked item, or find first visible item
-        const referenceItem = lastClickedItem || findVisibleItem();
-        switchToList(referenceItem);
-      }
+      if (isGridView) switchToList();
     });
   }
   
@@ -925,19 +887,13 @@ function initCreatorImgListToggle() {
     target.style.cursor = 'pointer';
     target.style.userSelect = 'none'; // Prevent text selection
     
-    target.addEventListener('click', (e) => {
+    target.addEventListener('click', () => {
       console.log('🖱️ Image click detected, toggling view');
-      e.preventDefault();
-      e.stopPropagation();
-      
-      // Find the parent .creator_img item
-      const clickedItem = target.closest('.creator_img') || target;
-      lastClickedItem = clickedItem;
       
       if (isGridView) {
-        switchToList(clickedItem);
+        switchToList();
       } else {
-        switchToGrid(clickedItem);
+        switchToGrid();
       }
     });
   });
