@@ -52,6 +52,10 @@ const ENABLE_CREATOR_ANIMATIONS = true; // Set to true to re-enable
 // Uses Headroom.js for reliable scroll detection
 // ================================================================================
 function initSmartNav() {
+  // 🚫 HEADROOM DISABLED
+  console.log('⏭️ Smart nav (Headroom): DISABLED');
+  return;
+  
   const nav = document.querySelector('.nav_component');
   const indexWrap = document.querySelector('.index_wrap');
   
